@@ -1,142 +1,499 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Teacher's Toolbox (Glitch v5.1 - Merged)</title>
-    <!-- Link to external CSS file -->
-    <link rel="stylesheet" href="style.css" />
-    <!-- Gradio Script (Optional - needed only if you switch Translate back to <gradio-app>) -->
-    <!-- <script type="module" src="https://gradio.s3-us-west-2.amazonaws.com/4.32.2/gradio.js"></script> -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Animated Archer vs Insect v7.0</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #222; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        canvas { display: block; background: #87CEEB; cursor: default; image-rendering: pixelated; image-rendering: crisp-edges; border: 1px solid black; }
+        #ui-overlay { position: absolute; top: 10px; left: 10px; color: white; text-shadow: 1px 1px 2px black; z-index: 10; font-size: 18px; font-family: 'Courier New', Courier, monospace; }
+        #game-message { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: yellow; font-size: 48px; text-align: center; text-shadow: 2px 2px 4px black; z-index: 20; display: none; font-family: Georgia, serif; }
+    </style>
 </head>
 <body>
-<div class="page-wrapper"> <!-- Wrapper for main content and side warnings -->
 
-    <div class="main-content-area"> <!-- Main content container -->
-        <h1>Teacher's Toolbox</h1>
+<canvas id="gameCanvas"></canvas>
+<div id="ui-overlay">
+    <span>Score: <span id="score">0</span></span>
+</div>
+<div id="game-message"></div>
 
-        <!-- Tab Navigation -->
-        <nav class="tab-nav" id="tabNav">
-            <button class="tab-button active" data-target="rosterPanel">Rosters & Presence</button>
-            <button class="tab-button" data-target="namePickerPanel">Random Name</button>
-            <button class="tab-button" data-target="groupMakerPanel">Group Maker</button>
-            <button class="tab-button" data-target="seatingChartPanel">Seating Chart</button>
-            <button class="tab-button" data-target="timerPanel">Timer</button>
-            <button class="tab-button" data-target="stopwatchPanel">Stopwatch</button>
-            <button class="tab-button" data-target="translatePanel">Translate</button>
-            <button class="tab-button" data-target="embedPanel">Embed Web Content</button>
-        </nav>
 
-        <div class="container">
-            <!-- Tab Content Area -->
-            <div class="tab-content">
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreDisplay = document.getElementById('score');
+    const gameMessage = document.getElementById('game-message');
 
-                <!-- Roster Panel -->
-                <div id="rosterPanel" class="tool-panel active">
-                    <h2>Manage Rosters & Presence</h2>
-                    <div class="input-group"> <label for="rosterSelect">Select:</label><select id="rosterSelect"></select><button id="makeAllPresentBtn" class="accent">Mark All Present</button><button id="deleteRosterBtn" class="danger" disabled>Delete</button> </div>
-                    <div class="panel-content-wrapper">
-                        <div class="roster-input-area">
-                            <label for="nameList">Roster Content:</label>
-                            <textarea id="nameList" placeholder="Student Name 1..."></textarea>
-                            <div class="input-group roster-actions"> <label for="rosterNameInput">Name:</label><input type="text" id="rosterNameInput" placeholder="e.g., P1" style="min-width: 80px; flex-grow: 1;"> </div>
-                            <div class="input-group roster-actions"> <button id="saveNewRosterBtn" class="accent">Save New</button><button id="updateRosterBtn" disabled>Update Sel.</button> </div>
-                        </div>
-                        <div id="studentPresenceGrid"> <div class="grid-placeholder">Select/load roster...</div> </div>
-                    </div>
-                </div>
+    // --- Game Configuration ---
+    const PLAYER_FRAME_WIDTH = 128; const PLAYER_FRAME_HEIGHT = 128; // Player sprite frame size
+    const PLAYER_SCALE = 1.5; const PLAYER_WIDTH = PLAYER_FRAME_WIDTH * PLAYER_SCALE; const PLAYER_HEIGHT = PLAYER_FRAME_HEIGHT * PLAYER_SCALE; // Player display size
+    const WALK_SPEED = 3; const RUN_SPEED = 6; const JUMP_POWER = 14; const GRAVITY = 0.6;
+    const SHOOT_COOLDOWN = 400;
 
-                <!-- Random Name Picker Panel -->
-                <div id="namePickerPanel" class="tool-panel">
-                    <h2>Random Name Picker</h2>
-                    <p>Uses present students from the selected roster.</p>
-                    <button id="pickNameBtn" class="accent">Pick Random</button>
-                    <div id="randomNameDisplay" class="display">--</div>
-                    <div class="options">
-                        <h4>Pick & Remove Mode</h4>
-                        <button id="pickAndRemoveBtn" class="accent">Pick & Remove</button>
-                        <button id="resetPickAndRemoveBtn">Reset List</button>
-                        <p>Remaining: <span id="remainingNamesCount">0</span></p>
-                        <ul id="removedNamesList" style="font-size: 0.8em; color: #6c757d; max-height: 100px; overflow-y: auto; border: 1px solid #eee; padding: 5px; list-style-position: inside;"></ul>
-                    </div>
-                    <div class="collapsible-section">
-                         <div class="collapsible-header collapsed" id="slotMachineSectionHeader">Name Slot Machine</div>
-                         <div class="collapsible-content hidden" id="slotMachineSectionContent">
-                             <div class="single-slot-container" id="nameSlotMachine"> <!-- Single Slot -->
-                                 <!-- Reel generated by JS -->
-                                 <p style="text-align: center; color: #6c757d;">Load roster first</p>
-                             </div>
-                             <div style="text-align: center; margin-top: 10px;">
-                                 <button id="spinSlotsBtn" class="accent">Spin!</button>
-                             </div>
-                         </div>
-                    </div>
-                </div>
+    // --- Arrow Configuration ---
+    const ARROW_SPEED = 10;
+    const ARROW_WIDTH = 64; // Doubled from 32
+    const ARROW_HEIGHT = 16; // Doubled from 8
 
-                <!-- Group Maker Panel -->
-                <div id="groupMakerPanel" class="tool-panel">
-                    <h2>Group Maker</h2>
-                    <p>Uses present students from the selected roster.</p>
-                    <div class="input-group"> <label for="numGroups"># Groups:</label><input type="number" id="numGroups" min="1" value="2" /><button id="makeGroupsBtn" class="accent">Make Groups</button><span class="roster-source-display" id="groupMakerRosterSource">Using: ...</span> </div>
-                    <div id="groupResultDisplay">Groups appear here...</div>
-                </div>
+    // --- Enemy Configuration ---
+    const INSECT_FRAME_WIDTH = 288; // Specific frame width for this insect sprite
+    const INSECT_FRAME_HEIGHT = 400;// Specific frame height for this insect sprite
+    const INSECT_SCALE = 0.6;      // Scale the insect down a bit
+    const INSECT_WIDTH = INSECT_FRAME_WIDTH * INSECT_SCALE;
+    const INSECT_HEIGHT = INSECT_FRAME_HEIGHT * INSECT_SCALE;
+    const INSECT_SPEED = 1.5;      // How fast the insect moves
+    const INSECT_ATTACK_RANGE = 50; // How close to player before stopping (example)
 
-                <!-- Seating Chart Panel -->
-                <div id="seatingChartPanel" class="tool-panel">
-                    <h2>Seating Chart</h2>
-                    <div class="seating-controls input-group"> <button id="loadRosterForSeatingBtn">Load Students</button><button id="saveChartLayoutBtn" class="accent" title="Save layout for current roster">Save</button><button id="loadChartLayoutBtn" title="Load layout for current roster">Load</button><button id="clearSeatingChartBtn" class="danger">Clear</button><button id="printSeatingChartBtn">Print</button><span class="roster-source-display" id="seatingChartRosterSource">Using: ...</span> </div>
-                    <div class="seating-area-container"> <div id="studentBank" class="student-bank"> <h4>Bank</h4> </div><div id="seatingChartCanvas"> <div class="grid-placeholder">Load students...</div> </div> </div>
-                </div>
+    // --- Asset Loading ---
+    const assets = {
+        // Player animations (use default frame size)
+        idle: {src:'https://cdn.glitch.global/ce5fa771-596b-473d-9ba2-37a363571210/Idle.png?v=1744295959021',frames:9,speed:150,img:new Image()},
+        walk: {src:'https://cdn.glitch.global/ce5fa771-596b-473d-9ba2-37a363571210/Walk.png?v=1744296403173',frames:8,speed:100,img:new Image()},
+        run:  {src:'https://cdn.glitch.global/ce5fa771-596b-473d-9ba2-37a363571210/Run.png?v=1744296517041',frames:8,speed:80,img:new Image()},
+        shot: {src:'https://cdn.glitch.global/ce5fa771-596b-473d-9ba2-37a363571210/Shot.png?v=1744296419840',frames:14,speed:50,img:new Image(),loop:false},
+        arrow:{src:'https://cdn.glitch.global/ce5fa771-596b-473d-9ba2-37a363571210/Arrow.png?v=1744296426952',img:new Image()}, // Arrow doesn't need animation data here
 
-                <!-- Timer Panel -->
-                <div id="timerPanel" class="tool-panel"> <h2>Timer</h2><div class="input-group"><label for="timerMinutes">M:</label><input type="number" id="timerMinutes" min="0" max="999" value="1"/><label for="timerSeconds">S:</label><input type="number" id="timerSeconds" min="0" max="59" value="0"/></div><div id="timerDisplay" class="display time-display">01:00</div><div class="input-group" style="justify-content:center"><button id="timerStartBtn" class="accent">Start</button><button id="timerPauseBtn" disabled>Pause</button><button id="timerResetBtn">Reset</button></div> </div>
+        // Enemy animations (specify frame dimensions here!)
+        insect_attack: {
+            src:'https://cdn.glitch.global/ce5fa771-596b-473d-9ba2-37a363571210/insect_attack-removebg-preview.png?v=1744344578211',
+            frames:3,
+            speed:150,
+            img:new Image(),
+            frameWidth: INSECT_FRAME_WIDTH,  // Store dimensions with asset
+            frameHeight: INSECT_FRAME_HEIGHT
+        }
+    };
+    let assetsLoadedCount = 0; const totalAssetsToLoad = Object.keys(assets).length; let allAssetsLoaded = false;
+    function assetLoaded() { assetsLoadedCount++; console.log(`Assets loaded: ${assetsLoadedCount}/${totalAssetsToLoad}`); if (assetsLoadedCount === totalAssetsToLoad) { allAssetsLoaded = true; console.log("All assets loaded!"); tryStartGame(); } }
+    for(const key in assets){assets[key].img.onload=assetLoaded;assets[key].img.onerror=()=>{console.error(`Failed to load ${key}`);assetLoaded();};assets[key].img.src=assets[key].src;}
 
-                <!-- Stopwatch Panel -->
-                <div id="stopwatchPanel" class="tool-panel"> <h2>Stopwatch</h2><div id="stopwatchDisplay" class="display time-display">00:00:00.00</div><div class="input-group" style="justify-content:center"><button id="stopwatchStartBtn" class="accent">Start</button><button id="stopwatchStopBtn" disabled>Stop</button><button id="stopwatchResetBtn">Reset</button></div> </div>
+    // --- Canvas & World ---
+    let CANVAS_WIDTH = window.innerWidth; let CANVAS_HEIGHT = window.innerHeight; canvas.width = CANVAS_WIDTH; canvas.height = CANVAS_HEIGHT; let groundY = CANVAS_HEIGHT - 50;
+    let cameraOffsetX = 0; // Define camera offset globally
 
-                <!-- Translate Panel -->
-                 <div id="translatePanel" class="tool-panel">
-                     <h2>Translate (UNESCO NLLB via HF Spaces)</h2>
-                     <p>Embedding the translator interface directly via iframe.</p>
-                     <div class="embed-info">
-                         If it fails to load (e.g., blank or shows an error), use the direct link (opens new tab): <a href="https://unesco-nllb.hf.space" target="_blank" rel="noopener noreferrer">https://unesco-nllb.hf.space</a>
-                     </div>
-                     <!-- Using iframe -->
-                     <div class="embed-container" style="height: 70vh;"> <!-- Specific height for translator iframe -->
-                          <iframe
-                              src="https://unesco-nllb.hf.space"
-                              frameborder="0"
-                           >Loading Translator...</iframe>
-                     </div>
-                 </div>
+    // === Player State ===
+    const player = { x:100, y:groundY-PLAYER_HEIGHT, width:PLAYER_WIDTH, height:PLAYER_HEIGHT, velocityX:0, velocityY:0, isGrounded:true, facingRight:true, isRunning:false, isShooting:false, shootTimer:0, currentAnimation:'idle', currentFrame:0, frameTimer:0, shootCooldownTimer:0 };
 
-                <!-- Embed Panel -->
-                <div id="embedPanel" class="tool-panel">
-                    <h2>Embed Web Content</h2>
-                    <div class="embed-info"> <p>Paste an <iframe> embed code below.</p><p><strong>Note:</strong> Success depends on the external site allowing embedding.</p> </div>
-                    <div class="embed-container" style="height: 75vh;"> <!-- Specific height for general embed -->
-                        <iframe src="https://docs.google.com/document/d/e/2PACX-1vRyr84ImszBMPzQg6KsQ1t4WbxeouVxmeyPyp3x-u7NvP1D74oYz65yVb2M98HImNEPD-k1XLzTJh3y/pub?embedded=true"></iframe>
-                    </div>
-                </div>
+    // === Projectiles ===
+    const arrows = [];
 
-            </div> <!-- end tab-content -->
-        </div> <!-- end container -->
-    </div> <!-- end main-content-area -->
+    // === Enemies ===
+    const enemies = []; // Array to hold all enemy objects
 
-    <!-- START: Persistent Warning Area (Vertical Stoplight) -->
-    <div class="persistent-warnings-container">
-        <div class="warnings-vertical" id="warningsContainer">
-            <div class="warning-light" id="warning3" title="Warning Level 3 (Red)"></div>
-            <div class="warning-light" id="warning2" title="Warning Level 2 (Orange)"></div>
-            <div class="warning-light" id="warning1" title="Warning Level 1 (Yellow)"></div>
-        </div>
-    </div>
-    <!-- END: Persistent Warning Area -->
+    // === Controls ===
+    const keys = {};
 
-</div> <!-- end page-wrapper -->
+    // --- Function Definitions ---
 
-    <!-- Link to external JavaScript file -->
-    <script src="script.js" defer></script>
+    function resizeCanvas() { CANVAS_WIDTH=window.innerWidth; CANVAS_HEIGHT=window.innerHeight; canvas.width=CANVAS_WIDTH; canvas.height=CANVAS_HEIGHT; groundY=CANVAS_HEIGHT-50; if(player.y+player.height>=groundY-5){player.y=groundY-player.height;} console.log(`Resized: ${CANVAS_WIDTH}x${CANVAS_HEIGHT}`); }
+
+    function fireArrowNow() {
+        // Adjust starting position calculation slightly for larger arrow
+        const startX = player.facingRight ? player.x + player.width * 0.7 : player.x + player.width * 0.3 - ARROW_WIDTH;
+        const startY = player.y + player.height * 0.4 - ARROW_HEIGHT / 2;
+        arrows.push({
+            x: startX, y: startY,
+            width: ARROW_WIDTH, height: ARROW_HEIGHT,
+            speed: ARROW_SPEED, damage: 1,
+            direction: player.facingRight ? 1 : -1,
+            img: assets.arrow.img // Direct reference to the loaded image
+        });
+        console.log("Fired Arrow");
+    }
+
+    function handleShoot() { // Triggered by mouse click
+        if (player.shootCooldownTimer > 0 || player.isShooting) return;
+        player.isShooting = true;
+        player.currentAnimation = 'shot';
+        player.currentFrame = 0;
+        player.frameTimer = 0;
+        player.shootCooldownTimer = SHOOT_COOLDOWN;
+        // Arrow firing is now handled by the animation frame in updatePlayer
+    }
+
+    function handleKeyDown(e) {
+        const key = e.key.toLowerCase();
+        keys[key] = true; // Register key press for continuous movement checks
+
+        if (key === ' ' && player.shootCooldownTimer <= 0 && !player.isShooting) {
+             // Trigger shot animation immediately IF not already shooting
+             player.isShooting = true;
+             player.currentAnimation = 'shot';
+             player.currentFrame = 0;
+             player.frameTimer = 0;
+             player.shootCooldownTimer = SHOOT_COOLDOWN;
+             // Arrow firing handled by animation frame
+        }
+        if ((key === 'w' || key === 'arrowup') && player.isGrounded) { // Jump
+            player.velocityY = -JUMP_POWER;
+            player.isGrounded = false;
+        }
+    }
+
+     function handleKeyUp(e) {
+         keys[e.key.toLowerCase()] = false;
+     }
+
+    function updatePlayer(deltaTime) {
+        // --- Movement ---
+        player.isRunning = keys['shift'];
+        const currentSpeed = player.isRunning ? RUN_SPEED : WALK_SPEED;
+        let targetVelocityX = 0;
+        if (keys['a'] || keys['arrowleft']) { targetVelocityX = -currentSpeed; player.facingRight = false; }
+        if (keys['d'] || keys['arrowright']) { targetVelocityX = currentSpeed; player.facingRight = true; }
+
+        // Simple lerp for smoother start/stop - optional
+        // player.velocityX += (targetVelocityX - player.velocityX) * 0.2;
+        player.velocityX = targetVelocityX; // Simpler direct control
+
+        player.x += player.velocityX;
+
+        // --- Jumping & Gravity ---
+        if (!player.isGrounded) { player.velocityY += GRAVITY; }
+        player.y += player.velocityY;
+
+        // --- Ground Collision ---
+        if (player.y + player.height >= groundY) {
+            player.y = groundY - player.height;
+            player.velocityY = 0;
+            player.isGrounded = true;
+        } else {
+            player.isGrounded = false;
+        }
+
+        // --- Screen Boundaries ---
+        player.x = Math.max(0, player.x);
+        // Potentially add right boundary based on world size later
+
+        // --- Animation State ---
+        if (!player.isShooting) {
+            if (!player.isGrounded) {
+                // Basic jump/fall pose (using idle frame 4 as placeholder)
+                player.currentAnimation = 'idle';
+                player.currentFrame = 4; // Or add specific jump/fall animation
+            } else if (targetVelocityX !== 0) {
+                player.currentAnimation = player.isRunning ? 'run' : 'walk';
+            } else {
+                player.currentAnimation = 'idle';
+            }
+        }
+
+        // --- Animation Frame Update ---
+        player.frameTimer += deltaTime;
+        const animData = assets[player.currentAnimation];
+
+        // Check if animData and animData.speed exist before accessing
+        if (animData && typeof animData.speed === 'number' && player.frameTimer >= animData.speed) {
+            player.frameTimer = 0;
+            player.currentFrame++;
+
+            if (player.currentAnimation === 'shot') {
+                 // Fire arrow at a specific frame (e.g., frame 3)
+                if (player.currentFrame === 3) {
+                    fireArrowNow();
+                }
+                // Check if shot animation finished
+                if (player.currentFrame >= animData.frames) {
+                    player.isShooting = false;
+                    player.currentAnimation = 'idle'; // Return to idle
+                    player.currentFrame = 0;
+                }
+            } else {
+                 // Loop regular animations
+                 if (player.currentFrame >= animData.frames) {
+                     player.currentFrame = 0;
+                 }
+            }
+        } else if (animData && player.currentFrame >= animData.frames) {
+             // Reset frame if it somehow went out of bounds (e.g., changing animation)
+             player.currentFrame = 0;
+        }
+
+
+        // --- Cooldowns ---
+        if (player.shootCooldownTimer > 0) {
+            player.shootCooldownTimer -= deltaTime;
+        }
+    }
+
+    function updateArrows(deltaTime) {
+        for (let i = arrows.length - 1; i >= 0; i--) {
+            const arrow = arrows[i];
+            arrow.x += arrow.speed * arrow.direction;
+
+            // Simple despawn check (relative to camera/player for now)
+            if (arrow.x > player.x + CANVAS_WIDTH || arrow.x < player.x - CANVAS_WIDTH - ARROW_WIDTH) {
+                 arrows.splice(i, 1);
+                 continue; // Skip collision check for this removed arrow
+            }
+
+             // --- TODO: Arrow Collision Detection ---
+             // for (let j = enemies.length - 1; j >= 0; j--) {
+             //     const enemy = enemies[j];
+             //     if (arrow.x < enemy.x + enemy.width &&
+             //         arrow.x + arrow.width > enemy.x &&
+             //         arrow.y < enemy.y + enemy.height &&
+             //         arrow.y + arrow.height > enemy.y) {
+             //         // Collision!
+             //         console.log("Arrow hit enemy!");
+             //         arrows.splice(i, 1); // Remove arrow
+             //         // enemies.splice(j, 1); // Remove enemy (or decrease health)
+             //         // score += 10; // Increase score
+             //         break; // Arrow can only hit one enemy
+             //     }
+             // }
+        }
+    }
+
+    function updateEnemies(deltaTime) {
+        for (let i = enemies.length - 1; i >= 0; i--) {
+            const enemy = enemies[i];
+            const animData = assets[enemy.animationKey]; // Get animation data
+
+             // --- Basic AI: Move towards player ---
+             const dx = player.x + player.width / 2 - (enemy.x + enemy.width / 2);
+             const dy = player.y + player.height / 2 - (enemy.y + enemy.height / 2); // For future use (flying?)
+             const distance = Math.sqrt(dx * dx); // Only horizontal distance for now
+
+             let targetVelocityX = 0;
+             if (distance > INSECT_ATTACK_RANGE) { // Only move if further than attack range
+                 targetVelocityX = (dx > 0 ? 1 : -1) * INSECT_SPEED;
+                 enemy.facingRight = (dx > 0);
+             } else {
+                 // Close enough, stop moving (or start attacking animation later)
+                 targetVelocityX = 0;
+             }
+             enemy.velocityX = targetVelocityX; // Apply velocity directly for now
+             enemy.x += enemy.velocityX;
+
+             // --- TODO: Enemy Gravity/Ground Check (if needed) ---
+             // enemy.y += enemy.velocityY;
+             // if (enemy.y + enemy.height >= groundY) { ... }
+
+
+             // --- Animation Update ---
+             enemy.frameTimer += deltaTime;
+             if (animData && typeof animData.speed === 'number' && enemy.frameTimer >= animData.speed) {
+                 enemy.frameTimer = 0;
+                 enemy.currentFrame = (enemy.currentFrame + 1) % animData.frames;
+             }
+
+            // --- TODO: Player vs Enemy Collision Check ---
+             // if (player.x < enemy.x + enemy.width && ...) { ... handle player taking damage ... }
+        }
+    }
+
+
+    function updateUI() {
+        scoreDisplay.textContent = "0"; // Placeholder score
+        // Update other UI elements if needed
+    }
+
+    function draw() {
+        // Clear canvas
+        ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+        // Draw background (sky and ground)
+        ctx.fillStyle = '#87CEEB'; // Sky
+        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        ctx.fillStyle = '#228B22'; // Ground
+        ctx.fillRect(0, groundY, CANVAS_WIDTH, CANVAS_HEIGHT - groundY);
+
+        // --- Camera ---
+        // Center camera more towards player, but don't go past world start
+        cameraOffsetX = Math.max(0, player.x - CANVAS_WIDTH / 2 + player.width / 2);
+        // Clamp camera movement if world size is known (optional)
+        // cameraOffsetX = Math.min(cameraOffsetX, WORLD_WIDTH - CANVAS_WIDTH);
+
+        ctx.save(); // Save context before camera translation
+        ctx.translate(-cameraOffsetX, 0);
+
+        // --- Draw Game Objects (Respecting Camera) ---
+
+        // Draw Player
+        if (allAssetsLoaded && assets[player.currentAnimation]) {
+            const anim = assets[player.currentAnimation];
+            const sX = player.currentFrame * PLAYER_FRAME_WIDTH; // Source X on player spritesheet
+            const sY = 0; // Assuming single row spritesheet
+
+            ctx.save();
+            ctx.imageSmoothingEnabled = false; // Ensure pixelated rendering
+
+            // Flip player sprite if facing left
+            if (!player.facingRight) {
+                ctx.translate(player.x + player.width / 2, 0); // Move origin to player center
+                ctx.scale(-1, 1); // Flip horizontally
+                ctx.translate(-(player.x + player.width / 2), 0); // Move origin back
+            }
+
+            ctx.drawImage(
+                anim.img,
+                sX, sY, PLAYER_FRAME_WIDTH, PLAYER_FRAME_HEIGHT, // Source rect
+                player.x, player.y, PLAYER_WIDTH, PLAYER_HEIGHT // Destination rect
+            );
+            ctx.restore(); // Restore context after potential flip
+        } else {
+            // Placeholder drawing if assets not loaded
+            ctx.fillStyle = 'purple';
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+        }
+
+         // Draw Enemies
+         enemies.forEach(enemy => {
+             if (allAssetsLoaded && assets[enemy.animationKey]) {
+                 const animData = assets[enemy.animationKey];
+                 // Use frame dimensions stored *in the asset*
+                 const enemySourceFrameWidth = animData.frameWidth || INSECT_FRAME_WIDTH; // Fallback just in case
+                 const enemySourceFrameHeight = animData.frameHeight || INSECT_FRAME_HEIGHT;
+                 const sX = enemy.currentFrame * enemySourceFrameWidth;
+                 const sY = 0;
+
+                 ctx.save();
+                 ctx.imageSmoothingEnabled = false;
+
+                 if (!enemy.facingRight) {
+                     ctx.translate(enemy.x + enemy.width / 2, 0);
+                     ctx.scale(-1, 1);
+                     ctx.translate(-(enemy.x + enemy.width / 2), 0);
+                 }
+
+                 ctx.drawImage(
+                     animData.img,
+                     sX, sY, enemySourceFrameWidth, enemySourceFrameHeight, // Source rect using specific dimensions
+                     enemy.x, enemy.y, enemy.width, enemy.height // Destination rect using scaled dimensions
+                 );
+                 ctx.restore();
+             } else {
+                 ctx.fillStyle = 'red'; // Placeholder for enemy
+                 ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+             }
+         });
+
+        // Draw Arrows
+        arrows.forEach(a => {
+            ctx.save();
+            // Translate to arrow center for rotation/scaling if needed
+            ctx.translate(a.x + a.width / 2, a.y + a.height / 2);
+            if (a.direction === -1) {
+                ctx.scale(-1, 1); // Flip arrow horizontally if moving left
+            }
+            if (a.img && allAssetsLoaded) {
+                ctx.drawImage(
+                    a.img,
+                    -a.width / 2, -a.height / 2, // Draw centered around the translated origin
+                    a.width, a.height
+                );
+            } else {
+                ctx.fillStyle = 'brown';
+                ctx.fillRect(-a.width / 2, -a.height / 2, a.width, a.height);
+            }
+            ctx.restore();
+        });
+
+
+        ctx.restore(); // Restore context after camera translation (draw UI elements outside this)
+
+        // --- UI drawn outside camera translation ---
+        // updateUI() handles updating the text content. Draw happens here if needed.
+    }
+
+    function drawEndScreen(){ /* ... placeholder ... */ }
+
+     function update(deltaTime) { // Main update function definition
+         if (!allAssetsLoaded || !gameRunning) return; // Only update if assets loaded and game running
+
+         updatePlayer(deltaTime);
+         updateArrows(deltaTime);
+         updateEnemies(deltaTime); // Update enemies
+         updateUI();
+    }
+
+    // === Main Game Loop (Defined AFTER update) ===
+    let lastTime = 0; let gameLoopId = null; let gameLoopStarted = false; let gameRunning = false; // Added gameRunning flag
+    function gameLoop(timestamp) {
+        if (!gameLoopStarted) return; // Should not happen if started correctly
+        if (!gameRunning) {
+             // If game is paused or over, maybe draw a static screen
+             // drawEndScreen(); // Or a pause screen
+             gameLoopId = requestAnimationFrame(gameLoop); // Keep loop going to check for resume
+             return;
+        }
+
+        const deltaTime = Math.min(50, (timestamp - lastTime) || (1000 / 60)); // Cap delta time to prevent large jumps
+        lastTime = timestamp;
+
+        update(deltaTime); // Call the main update function
+        draw();
+
+        gameLoopId = requestAnimationFrame(gameLoop); // Continue the loop
+    }
+
+    // === Initialization ===
+    function initGame() {
+        console.log("Initializing game state...");
+        resizeCanvas(); // Ensure canvas size is correct
+
+        // Reset Player
+        player.x=100; player.y=groundY-PLAYER_HEIGHT; player.velocityX=0; player.velocityY=0; player.isGrounded=true; player.facingRight=true; player.currentAnimation='idle'; player.currentFrame=0; player.frameTimer=0; player.shootCooldownTimer=0; player.isShooting=false;
+
+        // Clear Arrays
+        arrows.length = 0;
+        enemies.length = 0; // Clear existing enemies
+
+        // Spawn Initial Enemies
+        enemies.push({
+             x: CANVAS_WIDTH * 0.8, // Start enemy further right
+             y: groundY - INSECT_HEIGHT, // On the ground
+             width: INSECT_WIDTH, height: INSECT_HEIGHT,
+             velocityX: 0, velocityY: 0, // Initial velocity
+             facingRight: false, // Initially facing left towards player
+             animationKey: 'insect_attack', // Reference to the asset key
+             currentFrame: 0,
+             frameTimer: 0,
+             // Add health etc. later
+        });
+
+        // Reset Game State
+        score = 0; // Use a global score variable if needed, or pass UI element
+        cameraOffsetX = 0;
+        // gameOver = false; gameWon = false; // Add back when needed
+        gameRunning = true; // Set game to running state
+
+        updateUI(); // Update score display etc.
+
+        if(gameLoopId) cancelAnimationFrame(gameLoopId); // Stop previous loop if restarting
+        lastTime = performance.now(); // Reset timer
+        gameLoopStarted = true; // Ensure loop knows it's okay to run
+        console.log("Starting main game loop...");
+        gameLoopId = requestAnimationFrame(gameLoop); // Start the new loop
+    }
+
+    function tryStartGame() {
+        // Only start if assets are loaded AND the loop hasn't already been started
+        if (allAssetsLoaded && !gameLoopStarted) {
+            console.log("Assets loaded, attempting to start game...");
+            initGame();
+        } else if (!allAssetsLoaded) {
+             console.log("Assets not yet fully loaded, waiting...");
+        } else {
+             console.log("Game loop already started or attempted.");
+        }
+    }
+
+    // --- Attach Event Listeners (AFTER function definitions) ---
+    window.addEventListener('keydown', handleKeyDown); // handleKeyDown defined above now
+    window.addEventListener('keyup', handleKeyUp); // Use separate handler for keyup
+    window.addEventListener('resize', resizeCanvas); // resizeCanvas defined above now
+    canvas.addEventListener('mousedown', handleShoot); // handleShoot defined above now
+    window.onerror = function(msg, src, lin, col, err) { console.error("Global error:", msg, "at", src, lin, col, err); gameRunning = false; }; // Stop game on error
+
+    // Initial setup
+    resizeCanvas(); // Initial size calculation
+    // tryStartGame is called by the *last* image onload handler
+
+</script>
 
 </body>
 </html>
